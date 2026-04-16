@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Search, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,49 +12,73 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ClientCard } from "@/components/client-card"
-
-const MOCK_CLIENTS = [
-  { id: 1, name: "Doña Lupe", balance: 730.00 },
-  { id: 2, name: "Chabe Hernández", balance: 50.00 },
-  { id: 3, name: "Kenia", balance: 793.00 },
-  { id: 4, name: "Pipo", balance: 430.00 },
-]
+import { supabase } from "@/lib/supabase" // Tu puente de conexión
 
 type SortOption = "debt" | "alphabetical"
+
+// Le decimos a TypeScript cómo viene tu tabla de Supabase
+interface Cliente {
+  id: number;
+  nombre: string;
+  saldo_pendiente: number;
+}
 
 export function ClientList() {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<SortOption>("debt")
 
-  const filteredAndSortedClients = useMemo(() => {
-    let clients = [...MOCK_CLIENTS]
+  // Nuevos estados para controlar la base de datos
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [cargando, setCargando] = useState(true)
 
-    // Filter by search query
+  // Efecto que jala los datos reales cuando abres la pantalla
+  useEffect(() => {
+    const cargarClientes = async () => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('*')
+
+      if (!error && data) {
+        setClientes(data)
+      } else {
+        console.error("Error al cargar la base de datos:", error)
+      }
+      setCargando(false)
+    }
+
+    cargarClientes()
+  }, [])
+
+  // El buscador y filtro conectados a tus datos vivos
+  const filteredAndSortedClients = useMemo(() => {
+    let clientsFiltrados = [...clientes]
+
+    // Filtrar por texto (buscador)
     if (searchQuery) {
-      clients = clients.filter((client) =>
-        client.name.toLowerCase().includes(searchQuery.toLowerCase())
+      clientsFiltrados = clientsFiltrados.filter((client) =>
+        client.nombre.toLowerCase().includes(searchQuery.toLowerCase())
       )
     }
 
-    // Sort
+    // Ordenamiento inteligente
     if (sortBy === "debt") {
-      clients.sort((a, b) => b.balance - a.balance)
+      clientsFiltrados.sort((a, b) => b.saldo_pendiente - a.saldo_pendiente)
     } else {
-      clients.sort((a, b) => a.name.localeCompare(b.name))
+      clientsFiltrados.sort((a, b) => a.nombre.localeCompare(b.nombre))
     }
 
-    return clients
-  }, [searchQuery, sortBy])
+    return clientsFiltrados
+  }, [searchQuery, sortBy, clientes])
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sticky Header */}
+      {/* Encabezado fijo */}
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-5 pt-6 pb-4">
         <h1 className="text-2xl font-bold text-foreground mb-5">
           Gestión de Clientes
         </h1>
-        
-        {/* Search Bar */}
+
+        {/* Buscador */}
         <div className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
           <Input
@@ -66,7 +90,7 @@ export function ClientList() {
           />
         </div>
 
-        {/* Sort Dropdown */}
+        {/* Filtro */}
         <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
           <SelectTrigger className="w-full h-12 bg-muted border-0 rounded-xl text-base">
             <SelectValue placeholder="Ordenar por" />
@@ -78,17 +102,25 @@ export function ClientList() {
         </Select>
       </header>
 
-      {/* Client List */}
+      {/* Lista de Clientes */}
       <main className="px-5 pt-2 pb-28">
         <div className="flex flex-col gap-4">
-          {filteredAndSortedClients.map((client) => (
-            <ClientCard
-              key={client.id}
-              name={client.name}
-              balance={client.balance}
-            />
-          ))}
-          {filteredAndSortedClients.length === 0 && (
+          {cargando ? (
+            <p className="text-center text-muted-foreground py-8 animate-pulse">
+              Cargando tu cartera de clientes...
+            </p>
+          ) : (
+            filteredAndSortedClients.map((client) => (
+              <ClientCard
+                key={client.id}
+                id={client.id} // <--- Agrega esta línea
+                name={client.nombre}
+                balance={client.saldo_pendiente}
+              />
+            ))
+          )}
+
+          {!cargando && filteredAndSortedClients.length === 0 && (
             <p className="text-center text-muted-foreground py-8">
               No se encontraron clientes
             </p>
@@ -96,10 +128,10 @@ export function ClientList() {
         </div>
       </main>
 
-      {/* Floating Action Button */}
+      {/* Botón Flotante */}
       <Button
         size="icon"
-        className="fixed bottom-8 right-6 size-16 rounded-full shadow-xl shadow-primary/30"
+        className="fixed bottom-8 right-6 size-16 rounded-full shadow-xl shadow-primary/30 z-50 hover:scale-105 active:scale-95 transition-all"
       >
         <Plus className="size-7" />
         <span className="sr-only">Agregar cliente</span>

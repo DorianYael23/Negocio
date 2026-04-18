@@ -1,141 +1,183 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { Search, Plus } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { useState, useEffect, useMemo } from "react"
 import { ClientCard } from "@/components/client-card"
-import { supabase } from "@/lib/supabase" // Tu puente de conexión
-
-type SortOption = "debt" | "alphabetical"
-
-// Le decimos a TypeScript cómo viene tu tabla de Supabase
-interface Cliente {
-  id: number;
-  nombre: string;
-  saldo_pendiente: number;
-}
+import { SearchBar } from "@/components/search-bar"
+import { supabase } from "@/lib/supabase"
+import { Loader2, UserPlus, X, Users } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer"
+import { useRouter } from "next/navigation"
 
 export function ClientList() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<SortOption>("debt")
-
-  // Nuevos estados para controlar la base de datos
-  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [clientes, setClientes] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
 
-  // Efecto que jala los datos reales cuando abres la pantalla
-  useEffect(() => {
-    const cargarClientes = async () => {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('*')
+  // Estados para Nuevo Cliente
+  const [isNuevoClienteOpen, setIsNuevoClienteOpen] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState("")
+  const [isPending, setIsPending] = useState(false)
+  const router = useRouter()
 
-      if (!error && data) {
-        setClientes(data)
-      } else {
-        console.error("Error al cargar la base de datos:", error)
-      }
-      setCargando(false)
+  // Función para traer todos los clientes
+  const fetchClientes = async () => {
+    setCargando(true)
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("*")
+      .order("nombre", { ascending: true })
+
+    if (error) {
+      console.error("Error fetching clientes:", error)
+      toast.error("Error al cargar la lista de clientes")
+    } else if (data) {
+      setClientes(data)
     }
+    setCargando(false)
+  }
 
-    cargarClientes()
+  // Cargar clientes al iniciar la pantalla
+  useEffect(() => {
+    fetchClientes()
   }, [])
 
-  // El buscador y filtro conectados a tus datos vivos
-  const filteredAndSortedClients = useMemo(() => {
-    let clientsFiltrados = [...clientes]
-
-    // Filtrar por texto (buscador)
-    if (searchQuery) {
-      clientsFiltrados = clientsFiltrados.filter((client) =>
-        client.nombre.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+  // Función para guardar al nuevo cliente en Supabase
+  const handleAgregarCliente = async () => {
+    if (!nuevoNombre.trim()) {
+      toast.error("Por favor, ingresa el nombre del cliente")
+      return
     }
+    
+    setIsPending(true)
+    try {
+      const { error } = await supabase
+        .from("clientes")
+        .insert([{ 
+          nombre: nuevoNombre.trim(), 
+          saldo_pendiente: 0 // Inician sin deber nada
+        }])
 
-    // Ordenamiento inteligente
-    if (sortBy === "debt") {
-      clientsFiltrados.sort((a, b) => b.saldo_pendiente - a.saldo_pendiente)
-    } else {
-      clientsFiltrados.sort((a, b) => a.nombre.localeCompare(b.nombre))
+      if (error) throw error
+
+      toast.success(`Cliente "${nuevoNombre}" agregado con éxito`)
+      setNuevoNombre("") // Limpiamos el texto
+      setIsNuevoClienteOpen(false) // Cerramos el cajón
+      fetchClientes() // Recargamos la lista para que aparezca
+      router.refresh()
+    } catch (error) {
+      console.error(error)
+      toast.error("Error al guardar el nuevo cliente")
+    } finally {
+      setIsPending(false)
     }
+  }
 
-    return clientsFiltrados
-  }, [searchQuery, sortBy, clientes])
+  // Buscador en tiempo real
+  const clientesFiltrados = useMemo(() => {
+    return clientes.filter(c => 
+      (c.nombre || "").toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [clientes, searchQuery])
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Encabezado fijo */}
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-5 pt-6 pb-4">
-        <h1 className="text-2xl font-bold text-foreground mb-5">
-          Gestión de Clientes
-        </h1>
+    <div className="min-h-screen bg-slate-50">
+      {/* Cabecera Fija */}
+      <div className="sticky top-0 z-10 bg-slate-50 pt-4 pb-2 px-4 space-y-4 shadow-sm border-b">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Users className="size-6 text-primary" />
+            Clientes
+          </h1>
+          
+          {/* BOTÓN Y CAJÓN DE NUEVO CLIENTE */}
+          <Drawer open={isNuevoClienteOpen} onOpenChange={setIsNuevoClienteOpen}>
+            <DrawerTrigger asChild>
+              <Button size="sm" className="bg-primary hover:bg-primary/90 font-bold rounded-xl shadow-sm">
+                <UserPlus className="size-4 mr-1.5" />
+                Nuevo
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent>
+              <div className="mx-auto w-full max-w-sm relative">
+                <DrawerClose asChild>
+                  <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full">
+                    <X className="size-5 text-muted-foreground" />
+                  </Button>
+                </DrawerClose>
+
+                <DrawerHeader>
+                  <DrawerTitle className="text-xl">Agregar Nuevo Cliente</DrawerTitle>
+                  <DrawerDescription>Ingresa el nombre completo o apodo.</DrawerDescription>
+                </DrawerHeader>
+
+                <div className="p-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Nombre del Cliente</label>
+                    <Input
+                      autoFocus
+                      placeholder="Ej. Doña Flor, Tía Luisa..."
+                      className="h-14 text-lg rounded-xl bg-slate-50 border-slate-200"
+                      value={nuevoNombre}
+                      onChange={(e) => setNuevoNombre(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <DrawerFooter className="gap-3 pb-8">
+                  <Button 
+                    onClick={handleAgregarCliente} 
+                    disabled={isPending}
+                    className="h-14 text-lg bg-primary hover:bg-primary/90 font-bold rounded-xl"
+                  >
+                    {isPending ? "Guardando..." : "Guardar Cliente"}
+                  </Button>
+                </DrawerFooter>
+              </div>
+            </DrawerContent>
+          </Drawer>
+        </div>
 
         {/* Buscador */}
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Buscar cliente..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 h-12 bg-muted border-0 rounded-xl text-base"
-          />
-        </div>
+        <SearchBar value={searchQuery} onChange={setSearchQuery} />
+      </div>
 
-        {/* Filtro */}
-        <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
-          <SelectTrigger className="w-full h-12 bg-muted border-0 rounded-xl text-base">
-            <SelectValue placeholder="Ordenar por" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="debt">Mayor a menor deuda</SelectItem>
-            <SelectItem value="alphabetical">Alfabético</SelectItem>
-          </SelectContent>
-        </Select>
-      </header>
-
-      {/* Lista de Clientes */}
-      <main className="px-5 pt-2 pb-28">
-        <div className="flex flex-col gap-4">
-          {cargando ? (
-            <p className="text-center text-muted-foreground py-8 animate-pulse">
-              Cargando tu cartera de clientes...
+      {/* Lista de Tarjetas */}
+      <div className="p-4 pb-24 space-y-4">
+        {cargando ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <Loader2 className="size-8 animate-spin mb-4 text-primary" />
+            <p className="font-medium">Cargando cartera de clientes...</p>
+          </div>
+        ) : clientesFiltrados.length > 0 ? (
+          clientesFiltrados.map((cliente) => (
+            <ClientCard 
+              key={cliente.id} 
+              id={cliente.id} 
+              name={cliente.nombre} 
+              balance={cliente.saldo_pendiente} 
+            />
+          ))
+        ) : (
+          <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+            <UserPlus className="size-12 mx-auto text-slate-300 mb-4" />
+            <p className="text-slate-500 font-medium">
+              No se encontraron clientes con ese nombre
             </p>
-          ) : (
-            filteredAndSortedClients.map((client) => (
-              <ClientCard
-                key={client.id}
-                id={client.id} // <--- Agrega esta línea
-                name={client.nombre}
-                balance={client.saldo_pendiente}
-              />
-            ))
-          )}
-
-          {!cargando && filteredAndSortedClients.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">
-              No se encontraron clientes
-            </p>
-          )}
-        </div>
-      </main>
-
-      {/* Botón Flotante */}
-      <Button
-        size="icon"
-        className="fixed bottom-8 right-6 size-16 rounded-full shadow-xl shadow-primary/30 z-50 hover:scale-105 active:scale-95 transition-all"
-      >
-        <Plus className="size-7" />
-        <span className="sr-only">Agregar cliente</span>
-      </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

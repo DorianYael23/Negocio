@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { Toaster } from "sonner" // Importamos el componente de notificaciones
+import { Toaster } from "sonner"
+import { AdminTopbar } from "@/components/admin-topbar"
 import './globals.css'
 
 const geistSans = Geist({
@@ -42,10 +43,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className="bg-background">
+    <html lang="es" className="bg-slate-50">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        {children}
-        {/* Aquí es donde vivirán las notificaciones bonitas */}
+        
+        <AdminTopbar />
+
+        <main className="max-w-md mx-auto min-h-screen bg-white shadow-sm pb-10">
+          {children}
+        </main>
+
         <Toaster position="top-center" richColors closeButton />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

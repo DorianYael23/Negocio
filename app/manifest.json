@@ -1,0 +1,16 @@
+{
+  "name": "Gestor de Cuentas",
+  "short_name": "Cuentas",
+  "description": "Sistema de administración",
+  "start_url": "/clientes",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

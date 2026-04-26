@@ -1,9 +1,6 @@
-import { ProductCatalog } from "@/components/product-catalog"
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  return (
-    <main className="max-w-6xl mx-auto">
-      <ProductCatalog />
-    </main>
-  )
+export default function RootPage() {
+  // Que no quede duda: ¡A clientes!
+  redirect("/clientes");
 }

@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Catálogo de Productos',
+  manifest: '/manifest.json',
   description: 'Explora nuestro catálogo de productos y pide por WhatsApp',
   generator: 'v0.app',
   icons: {

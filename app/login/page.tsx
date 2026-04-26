@@ -2,20 +2,27 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Lock, ArrowRight, Eye, EyeOff } from "lucide-react" // Importamos los iconos del ojo
+import { Lock, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 
 export default function LoginPage() {
   const [user, setUser] = useState<"DORIAN" | "MARISOL">("MARISOL")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false) // Estado para mostrar/ocultar
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     
-    const passDorian = process.env.NEXT_PUBLIC_PASS_DORIAN || "1234"
-    const passMama = process.env.NEXT_PUBLIC_PASS_MAMA || "1234"
+    // Eliminamos el || "1234". Ahora solo aceptará lo que venga de Vercel.
+    const passDorian = process.env.NEXT_PUBLIC_PASS_DORIAN
+    const passMama = process.env.NEXT_PUBLIC_PASS_MAMA
+
+    // Verificamos que las llaves existan. Si no, bloqueamos el acceso por seguridad.
+    if (!passDorian || !passMama) {
+      toast.error("Error de configuración: Las llaves no se detectaron en el servidor.")
+      return
+    }
 
     const correctPassword = user === "DORIAN" ? passDorian : passMama
 
@@ -60,7 +67,6 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="relative">
             <input 
-              // Cambiamos dinámicamente entre "password" y "text"
               type={showPassword ? "text" : "password"} 
               placeholder="Contraseña" 
               className="w-full h-14 text-center text-2xl tracking-widest rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-12"
@@ -68,7 +74,6 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            {/* Botón del ojito posicionado dentro del input */}
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}

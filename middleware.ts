@@ -3,6 +3,11 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.pathname;
+
+  // NUEVO: Si es el manifest o un icono, déjalo pasar siempre
+  if (url === '/manifest.json' || url.endsWith('.png') || url.endsWith('.svg')) {
+    return NextResponse.next();
+  }
   const hasSession = request.cookies.has('auth-session');
 
   // 1. Si intenta ir a login, lo dejamos pasar si no tiene sesión
@@ -33,6 +38,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|.*\\.png$|.*\\.svg$).*)',
   ],
 }

@@ -246,7 +246,7 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
                 </Button>
               </DrawerTrigger>
               
-              <DrawerContent className="h-[85vh] flex flex-col overflow-hidden">
+              <DrawerContent className="h-[96dvh] flex flex-col overflow-hidden">
                 <div className="mx-auto w-full max-w-md relative flex flex-col h-full overflow-hidden">
                   <DrawerClose asChild>
                     <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full z-10"><X className="size-5 text-muted-foreground" /></Button>

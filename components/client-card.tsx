@@ -232,21 +232,25 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
               </DrawerContent>
             </Drawer>
 
-            <Drawer open={isVentaOpen} onOpenChange={(open) => {
-              setIsVentaOpen(open)
-              if (!open) {
-                setCarrito([])
-                setCustomName("")
-                setCustomPrice("")
-              }
-            }}>
+            <Drawer 
+              open={isVentaOpen} 
+              onOpenChange={(open) => {
+                setIsVentaOpen(open)
+                if (!open) {
+                  setCarrito([])
+                  setCustomName("")
+                  setCustomPrice("")
+                }
+              }}
+              repositionInputs={false} 
+            >
               <DrawerTrigger asChild>
                 <Button variant="outline" className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 h-11 text-sm font-bold shadow-sm">
                   <ShoppingCart className="mr-2 size-4" /> Vender
                 </Button>
               </DrawerTrigger>
               
-              <DrawerContent className="h-[96dvh] flex flex-col overflow-hidden">
+              <DrawerContent className="h-[85vh] flex flex-col overflow-hidden">
                 <div className="mx-auto w-full max-w-md relative flex flex-col h-full overflow-hidden">
                   <DrawerClose asChild>
                     <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full z-10"><X className="size-5 text-muted-foreground" /></Button>

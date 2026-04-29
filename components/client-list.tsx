@@ -63,10 +63,19 @@ function ClientListContent() {
     
     setIsPending(true)
     try {
-      const { error } = await supabase.from("clientes").insert([{ nombre: nuevoNombre.trim(), saldo_pendiente: 0 }])
+      // 1. Limpiamos y guardamos el nombre de una vez por todas
+      const nombreFinal = nuevoNombre.trim()
+      
+      // 2. Usamos "nombreFinal" para guardarlo en Supabase
+      const { error } = await supabase.from("clientes").insert([{ nombre: nombreFinal, saldo_pendiente: 0 }])
       if (error) throw error
 
-      toast.success(`Cliente "${nuevoNombre}" agregado con éxito`)
+      // 3. Usamos "nombreFinal" para la notificación
+      toast.success(`Cliente "${nombreFinal}" agregado con éxito`)
+      
+      // 4. Inyectamos "nombreFinal" en el buscador
+      setSearchQuery(nombreFinal)
+
       setNuevoNombre("") 
       setIsNuevoClienteOpen(false) 
       fetchClientes() 

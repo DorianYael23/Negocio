@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { TriangleAlert, Receipt, ShoppingCart, X, CheckCircle2, Search, Package, Plus, Minus, Clock } from "lucide-react"
+import { TriangleAlert, Receipt, ShoppingCart, X, CheckCircle2, Search, Package, Plus, Minus, Clock, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -34,6 +34,7 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
   const [amount, setAmount] = useState("")
   const [isPending, setIsPending] = useState(false)
   const [isAbonoOpen, setIsAbonoOpen] = useState(false) 
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false) 
   
   const [isVentaOpen, setIsVentaOpen] = useState(false)
   const [productos, setProductos] = useState<any[]>([])
@@ -178,6 +179,34 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
     }
   }
 
+  const handleEliminarCliente = async () => {
+    setIsPending(true)
+    try {
+      const { error: errorMovs } = await supabase
+        .from("movimientos")
+        .delete()
+        .eq("cliente_id", id)
+      
+      if (errorMovs) throw errorMovs
+
+      const { error: errorCli } = await supabase
+        .from("clientes")
+        .delete()
+        .eq("id", id)
+      
+      if (errorCli) throw errorCli
+
+      toast.success(`Cliente ${name} eliminado`)
+      setIsDeleteOpen(false) 
+      router.refresh()
+    } catch (error) {
+      console.error("Error al eliminar:", error)
+      toast.error("Error al eliminar al cliente")
+    } finally {
+      setIsPending(false)
+    }
+  }
+
   const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(busquedaProducto.toLowerCase()))
   const isOverdue = currentBalance > 500
   const isCredit = currentBalance < 0
@@ -196,14 +225,58 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
               {isCredit ? "Saldo a Favor" : "Saldo Pendiente"}
             </p>
           </div>
-          <div className={`text-2xl font-black shrink-0 ${isOverdue ? "text-red-600" : isCredit ? "text-green-600" : "text-primary"}`}>
-            {isCredit && "+ "}${Math.abs(currentBalance).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+          
+          <div className="flex flex-col items-end shrink-0 gap-1">
+            <div className={`text-2xl font-black ${isOverdue ? "text-red-600" : isCredit ? "text-green-600" : "text-primary"}`}>
+              {isCredit && "+ "}${Math.abs(currentBalance).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            </div>
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setIsDeleteOpen(true)}
+              className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="size-4 mr-1" />
+              <span className="text-xs font-semibold">Borrar</span>
+            </Button>
+
+            <Drawer open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+              <DrawerContent>
+                <div className="mx-auto w-full max-w-sm relative">
+                  <DrawerHeader className="text-left">
+                    <DrawerTitle className="text-red-600 flex items-center gap-2 text-xl">
+                      <TriangleAlert className="size-6" />
+                      ¿Eliminar a {name}?
+                    </DrawerTitle>
+                    <DrawerDescription className="text-base mt-2 text-slate-600 font-medium leading-snug">
+                      Esta acción borrará todo su historial de ventas y abonos de forma permanente. 
+                      <br/><br/>
+                      <span className="font-bold text-red-600">Esto no se puede deshacer.</span>
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  
+                  <DrawerFooter className="pb-8 pt-4 grid grid-cols-2 gap-3">
+                    <DrawerClose asChild>
+                      <Button variant="outline" className="h-12 font-bold rounded-xl text-slate-600">
+                        Cancelar
+                      </Button>
+                    </DrawerClose>
+                    <Button
+                      onClick={handleEliminarCliente}
+                      disabled={isPending}
+                      className="h-12 bg-red-600 hover:bg-red-700 font-bold rounded-xl text-white shadow-sm"
+                    >
+                      {isPending ? "Borrando..." : "Sí, Eliminar"}
+                    </Button>
+                  </DrawerFooter>
+                </div>
+              </DrawerContent>
+            </Drawer>
           </div>
         </div>
 
-        {/* CONTENEDOR DE LOS 3 BOTONES */}
         <div className="flex flex-col gap-3">
-          {/* Fila de Abonar y Vender */}
           <div className="grid grid-cols-2 gap-3">
             <Drawer open={isAbonoOpen} onOpenChange={setIsAbonoOpen}>
               <DrawerTrigger asChild>
@@ -328,7 +401,6 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
             </Drawer>
           </div>
 
-          {/* NUEVO BOTÓN ANCHO Y CLARO PARA EL HISTORIAL */}
           <Button 
             variant="secondary" 
             onClick={() => router.push(`/historial?cliente=${encodeURIComponent(name)}`)}

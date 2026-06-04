@@ -25,6 +25,103 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 
+// ── Componente independiente para los tabs de cada cliente ──────────────────
+function ClienteHistorial({ datos, procesandoId, setMovimientoAEliminar }: any) {
+  const [tabActiva, setTabActiva] = useState<"ventas" | "abonos">("ventas");
+  const ventas = datos.lista.filter((m: any) => m.tipo_movimiento !== "abono");
+  const abonos = datos.lista.filter((m: any) => m.tipo_movimiento === "abono");
+
+  return (
+    <>
+      {/* TABS */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setTabActiva("ventas")}
+          className={`flex-1 h-9 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${
+            tabActiva === "ventas"
+              ? "bg-blue-100 text-blue-700 border border-blue-200"
+              : "bg-slate-100 text-slate-400 border border-transparent"
+          }`}
+        >
+          <ShoppingCart className="size-3.5" /> Ventas ({ventas.length})
+        </button>
+        <button
+          onClick={() => setTabActiva("abonos")}
+          className={`flex-1 h-9 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-colors ${
+            tabActiva === "abonos"
+              ? "bg-green-100 text-green-700 border border-green-200"
+              : "bg-slate-100 text-slate-400 border border-transparent"
+          }`}
+        >
+          <Receipt className="size-3.5" /> Abonos ({abonos.length})
+        </button>
+      </div>
+
+      {/* LISTA */}
+      <div className="space-y-2">
+        {tabActiva === "ventas" ? (
+          ventas.length > 0 ? (
+            ventas.map((mov: any) => (
+              <div key={mov.id} className="flex justify-between items-center p-2 pl-3 rounded-lg border bg-blue-50/50 border-blue-100">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 font-medium">
+                    {format(new Date(mov.created_at), "d MMM, h:mm a", { locale: es })}
+                  </p>
+                  <p className="text-[10px] uppercase font-bold truncate text-slate-700">
+                    {mov.productos?.nombre || mov.descripcion?.replace("Venta: ", "") || "Producto"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <p className="font-black text-blue-600">${mov.monto}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-red-400 hover:text-red-600"
+                    onClick={() => setMovimientoAEliminar(mov)}
+                    disabled={procesandoId === mov.id}
+                  >
+                    {procesandoId === mov.id ? <Loader2 className="animate-spin size-4" /> : <Trash2 className="size-4" />}
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-slate-400 italic pl-1">No hay registros de ventas.</p>
+          )
+        ) : (
+          abonos.length > 0 ? (
+            abonos.map((mov: any) => (
+              <div key={mov.id} className="flex justify-between items-center p-2 pl-3 rounded-lg border bg-green-50/50 border-green-100">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 font-medium">
+                    {format(new Date(mov.created_at), "d MMM, h:mm a", { locale: es })}
+                  </p>
+                  <p className="text-[10px] uppercase font-bold text-slate-700">Abono a cuenta</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <p className="font-black text-green-600">-${mov.monto}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-red-400 hover:text-red-600"
+                    onClick={() => setMovimientoAEliminar(mov)}
+                    disabled={procesandoId === mov.id}
+                  >
+                    {procesandoId === mov.id ? <Loader2 className="animate-spin size-4" /> : <Trash2 className="size-4" />}
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-slate-400 italic pl-1">No hay registros de abonos.</p>
+          )
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Componente principal ────────────────────────────────────────────────────
 function HistorialContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,16 +165,20 @@ function HistorialContent() {
     if (!movimientoAEliminar) return;
     setProcesandoId(movimientoAEliminar.id);
     try {
-      const { data: cliente, error } = await supabase.from("clientes").select("saldo_pendiente").eq("id", movimientoAEliminar.cliente_id).single();
+      const { data: cliente, error } = await supabase
+        .from("clientes")
+        .select("saldo_pendiente")
+        .eq("id", movimientoAEliminar.cliente_id)
+        .single();
       if (error || !cliente) throw new Error("No se encontró el cliente");
 
       let nuevoSaldo = cliente.saldo_pendiente;
       if (movimientoAEliminar.tipo_movimiento === "abono") nuevoSaldo += movimientoAEliminar.monto;
       else nuevoSaldo -= movimientoAEliminar.monto;
-      
+
       await supabase.from("clientes").update({ saldo_pendiente: nuevoSaldo }).eq("id", movimientoAEliminar.cliente_id);
       await supabase.from("movimientos").delete().eq("id", movimientoAEliminar.id);
-      
+
       toast.success("Movimiento eliminado y saldo actualizado");
       setMovimientoAEliminar(null);
       fetchMovimientos();
@@ -108,17 +209,21 @@ function HistorialContent() {
       <div className="space-y-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-          <Input placeholder="Buscar cliente..." className="pl-10 h-12 rounded-xl bg-white border-slate-200 shadow-sm" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          <Input
+            placeholder="Buscar cliente..."
+            className="pl-10 h-12 rounded-xl bg-white border-slate-200 shadow-sm"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
         </div>
 
-        {/* EL BOTÓN AHORA ES MÁS INTELIGENTE */}
         {busqueda && (
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => router.push(`/clientes?cliente=${encodeURIComponent(busqueda)}`)}
             className="w-full h-11 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold rounded-xl"
           >
-            <ArrowLeft className="mr-2 size-4" /> 
+            <ArrowLeft className="mr-2 size-4" />
             Volver a la cuenta de {busqueda}
           </Button>
         )}
@@ -130,36 +235,38 @@ function HistorialContent() {
         ) : (
           <Accordion type="multiple" className="space-y-3" defaultValue={clienteQuery ? ["item-0"] : []}>
             {clientesAgrupados.map(([nombreCliente, datos]: any, index: number) => (
-              <AccordionItem value={`item-${index}`} key={nombreCliente} className="bg-white border border-slate-200 rounded-xl px-4 shadow-sm">
+              <AccordionItem
+                value={`item-${index}`}
+                key={nombreCliente}
+                className="bg-white border border-slate-200 rounded-xl px-4 shadow-sm"
+              >
                 <AccordionTrigger className="hover:no-underline py-4">
-                   <div className="flex justify-between items-center w-full pr-4">
+                  <div className="flex justify-between items-center w-full pr-4">
                     <div className="flex items-center gap-3 text-left">
-                      <div className="bg-blue-50 p-2 rounded-full border border-blue-100 shrink-0"><User className="text-blue-600 size-5" /></div>
+                      <div className="bg-blue-50 p-2 rounded-full border border-blue-100 shrink-0">
+                        <User className="text-blue-600 size-5" />
+                      </div>
                       <span className="font-bold text-slate-700 capitalize leading-tight">{nombreCliente}</span>
                     </div>
                     <div className="text-right flex gap-3 shrink-0">
-                      <div className="flex flex-col"><span className="text-[9px] uppercase font-bold text-slate-400">Compras</span><span className="font-bold text-blue-600">${datos.totalCompras}</span></div>
-                      <div className="flex flex-col"><span className="text-[9px] uppercase font-bold text-slate-400">Abonos</span><span className="font-bold text-green-600">${datos.totalAbonos}</span></div>
+                      <div className="flex flex-col">
+                        <span className="text-[9px] uppercase font-bold text-slate-400">Compras</span>
+                        <span className="font-bold text-blue-600">${datos.totalCompras}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[9px] uppercase font-bold text-slate-400">Abonos</span>
+                        <span className="font-bold text-green-600">${datos.totalAbonos}</span>
+                      </div>
                     </div>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-4 space-y-2 border-t border-slate-100 mt-2">
-                  {datos.lista.map((mov: any) => (
-                    <div key={mov.id} className={`flex justify-between items-center p-2 pl-3 rounded-lg border ${mov.tipo_movimiento === "abono" ? "bg-green-50/50 border-green-100" : "bg-blue-50/50 border-blue-100"}`}>
-                      <div className="flex gap-3 items-center overflow-hidden flex-1">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-slate-500 font-medium">{format(new Date(mov.created_at), "d MMM, h:mm a", { locale: es })}</p>
-                          <p className="text-[10px] uppercase font-bold truncate">{mov.tipo_movimiento === "abono" ? "Abono a cuenta" : `Compra: ${mov.productos?.nombre || mov.descripcion?.replace('Venta: ', '') || 'Producto'}`}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <p className={`font-black ${mov.tipo_movimiento === "abono" ? "text-green-600" : "text-blue-600"}`}>{mov.tipo_movimiento === "abono" ? "+" : ""}${mov.monto}</p>
-                        <Button variant="ghost" size="icon" className="size-8 text-red-400 hover:text-red-600" onClick={() => setMovimientoAEliminar(mov)} disabled={procesandoId === mov.id}>
-                          {procesandoId === mov.id ? <Loader2 className="animate-spin size-4" /> : <Trash2 className="size-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+
+                <AccordionContent className="pt-4 pb-4 border-t border-slate-100 mt-2">
+                  <ClienteHistorial
+                    datos={datos}
+                    procesandoId={procesandoId}
+                    setMovimientoAEliminar={setMovimientoAEliminar}
+                  />
                 </AccordionContent>
               </AccordionItem>
             ))}
@@ -170,14 +277,28 @@ function HistorialContent() {
       <Drawer open={!!movimientoAEliminar} onOpenChange={(open) => !open && setMovimientoAEliminar(null)}>
         <DrawerContent>
           <div className="mx-auto w-full max-w-sm p-6 text-center">
-            <div className="mx-auto bg-red-100 w-16 h-16 flex items-center justify-center rounded-full mb-4"><AlertTriangle className="size-8 text-red-600" /></div>
+            <div className="mx-auto bg-red-100 w-16 h-16 flex items-center justify-center rounded-full mb-4">
+              <AlertTriangle className="size-8 text-red-600" />
+            </div>
             <DrawerTitle className="text-2xl font-black">¿Anular Movimiento?</DrawerTitle>
             <DrawerDescription className="text-base mt-2">
-              Se borrará el registro de <span className="font-bold text-slate-800">${movimientoAEliminar?.monto}</span> y se recalculará la deuda de <span className="font-bold text-slate-800">{movimientoAEliminar?.clientes?.nombre}</span>.
+              Se borrará el registro de{" "}
+              <span className="font-bold text-slate-800">${movimientoAEliminar?.monto}</span> y se
+              recalculará la deuda de{" "}
+              <span className="font-bold text-slate-800">{movimientoAEliminar?.clientes?.nombre}</span>.
             </DrawerDescription>
             <div className="mt-6 space-y-3">
-              <Button onClick={handleConfirmarEliminacion} className="w-full h-14 text-lg bg-red-600 hover:bg-red-700 font-bold rounded-xl text-white">Sí, Anular</Button>
-              <DrawerClose asChild><Button variant="outline" className="w-full h-14 text-lg font-bold rounded-xl text-slate-600">Cancelar</Button></DrawerClose>
+              <Button
+                onClick={handleConfirmarEliminacion}
+                className="w-full h-14 text-lg bg-red-600 hover:bg-red-700 font-bold rounded-xl text-white"
+              >
+                Sí, Anular
+              </Button>
+              <DrawerClose asChild>
+                <Button variant="outline" className="w-full h-14 text-lg font-bold rounded-xl text-slate-600">
+                  Cancelar
+                </Button>
+              </DrawerClose>
             </div>
           </div>
         </DrawerContent>
@@ -188,7 +309,13 @@ function HistorialContent() {
 
 export default function HistorialPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="size-8 animate-spin text-primary" /></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      }
+    >
       <HistorialContent />
     </Suspense>
   );

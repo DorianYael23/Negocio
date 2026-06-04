@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from "react"
 import { ClientCard } from "@/components/client-card"
 import { supabase } from "@/lib/supabase"
-import { Loader2, UserPlus, X, Users, Search } from "lucide-react" // Agregamos Search aquí
+import { Loader2, UserPlus, X, Users, Search, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -36,6 +36,7 @@ function ClientListContent() {
   const [isNuevoClienteOpen, setIsNuevoClienteOpen] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState("")
   const [isPending, setIsPending] = useState(false)
+  const [mostrarResumen, setMostrarResumen] = useState(false)
   const router = useRouter()
 
   const fetchClientes = async () => {
@@ -63,17 +64,12 @@ function ClientListContent() {
     
     setIsPending(true)
     try {
-      // 1. Limpiamos y guardamos el nombre de una vez por todas
       const nombreFinal = nuevoNombre.trim()
       
-      // 2. Usamos "nombreFinal" para guardarlo en Supabase
       const { error } = await supabase.from("clientes").insert([{ nombre: nombreFinal, saldo_pendiente: 0 }])
       if (error) throw error
 
-      // 3. Usamos "nombreFinal" para la notificación
       toast.success(`Cliente "${nombreFinal}" agregado con éxito`)
-      
-      // 4. Inyectamos "nombreFinal" en el buscador
       setSearchQuery(nombreFinal)
 
       setNuevoNombre("") 
@@ -88,7 +84,18 @@ function ClientListContent() {
     }
   }
 
- const clientesFiltrados = useMemo(() => {
+  // CÓMPUTO DEL TOTAL GENERAL
+  const totalDeudaGeneral = useMemo(() => {
+    return clientes.reduce((acc, cliente) => {
+      if (cliente.saldo_pendiente > 0) {
+        return acc + cliente.saldo_pendiente
+      }
+      return acc
+    }, 0)
+  }, [clientes])
+
+  // FILTRADO Y ORDENAMIENTO DE CLIENTES
+  const clientesFiltrados = useMemo(() => {
     const filtrados = clientes.filter(c => 
       (c.nombre || "").toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -103,19 +110,16 @@ function ClientListContent() {
       const prioridadA = getPrioridad(a.saldo_pendiente);
       const prioridadB = getPrioridad(b.saldo_pendiente);
 
-      // REGLA 1: Separar por grupos (Deudores hasta arriba)
       if (prioridadA !== prioridadB) {
         return prioridadB - prioridadA; 
       }
 
-      // REGLA 2: Si ambos son deudores, el que DEBE MÁS va primero (de mayor a menor)
       if (prioridadA === 3 && prioridadB === 3) {
         if (b.saldo_pendiente !== a.saldo_pendiente) {
           return b.saldo_pendiente - a.saldo_pendiente; 
         }
       }
 
-      // REGLA 3: Si están en ceros, tienen saldo a favor, o deben exactamente lo mismo, por abecedario
       return (a.nombre || "").localeCompare(b.nombre || "");
     })
   }, [clientes, searchQuery])
@@ -159,7 +163,7 @@ function ClientListContent() {
           </Drawer>
         </div>
 
-        {/* BUSCADOR CORREGIDO */}
+        {/* BUSCADOR */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
           <Input
@@ -171,7 +175,43 @@ function ClientListContent() {
         </div>
       </div>
 
+      {/* CONTENEDOR PRINCIPAL DE CONTENIDO */}
       <div className="p-4 pb-24 space-y-4">
+        
+        {/* TARJETA DE TOTAL GENERAL */}
+        {!cargando && clientes.length > 0 && (
+  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm mb-2 overflow-hidden">
+    <button
+      onClick={() => setMostrarResumen(!mostrarResumen)}
+      className="w-full flex justify-between items-center px-3 py-2.5"
+    >
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium text-slate-600">Total por cobrar</p>
+        {mostrarResumen && (
+          <p className="text-xl font-semibold text-slate-800">
+            ${totalDeudaGeneral.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        )}
+      </div>
+      <ChevronDown className={`size-4 text-slate-400 transition-transform duration-200 ${mostrarResumen ? "rotate-180" : ""}`} />
+    </button>
+
+    {mostrarResumen && (
+      <div className="px-3 pb-3">
+        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-amber-500 rounded-full"
+            style={{ width: `${Math.round((clientes.filter(c => c.saldo_pendiente > 0).length / clientes.length) * 100)}%` }}
+          />
+        </div>
+        <p className="text-xs text-slate-400 mt-1">
+          {Math.round((clientes.filter(c => c.saldo_pendiente > 0).length / clientes.length) * 100)}% de clientes con saldo pendiente · {clientes.filter(c => c.saldo_pendiente > 0).length} deudores
+        </p>
+      </div>
+    )}
+  </div>
+)}
+        {/* RENDERIZADO CONDICIONAL DE CLIENTES */}
         {cargando ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Loader2 className="size-8 animate-spin mb-4 text-primary" />

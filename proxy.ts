@@ -23,7 +23,7 @@ export function proxy(request: NextRequest) {
 
   // 3. RUTAS BLOQUEADAS (El bug estaba aquí)
   // Si intenta entrar a productos, tienda o inventario, LO PATEAMOS a clientes
-  const rutasBloqueadas = ['/productos', '/tienda', '/inventario'];
+  const rutasBloqueadas = ['/productos', '/tienda'];
   if (rutasBloqueadas.some(ruta => url.startsWith(ruta))) {
     return NextResponse.redirect(new URL('/clientes', request.url)); // <-- REDIRECT, NO NEXT
   }

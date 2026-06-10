@@ -21,10 +21,11 @@ export function AdminTopbar() {
   // 1. Bloqueo: Si estamos en el login o en la tienda, no mostramos nada
   if (pathname === "/login" || pathname.startsWith('/tienda')) return null;
 
-  // 2. Títulos dinámicos
+  // 2. Títulos dinámicos (¡Agregamos la regla para /inventario!)
   let titulo = "Administración"
   if (pathname.includes("/clientes") || pathname === "/") titulo = "Mis Clientes"
   if (pathname.includes("/historial")) titulo = "Historial de Ventas"
+  if (pathname.includes("/inventario")) titulo = "Control de Inventario"
 
   const esPantallaPrincipal = pathname.includes("/clientes") || pathname === "/";
 
@@ -68,13 +69,12 @@ export function AdminTopbar() {
             </Button>
           </SheetTrigger>
           
-          {/* Usamos flex-col y h-full para empujar el botón al fondo */}
           <SheetContent side="right" className="bg-slate-50 p-0 w-[80%] max-w-sm border-l shadow-2xl flex flex-col h-full">
             
             <div className="flex-1 overflow-y-auto">
               <SheetHeader className="p-6 bg-white border-b text-left">
                 <SheetTitle className="text-2xl font-black text-blue-600">Mi Negocio</SheetTitle>
-                <p className="text-sm text-muted-foreground">Panel de Marisol</p>
+                <p className="text-sm text-muted-foreground">Panel del Negocio</p>
               </SheetHeader>
 
               <div className="flex flex-col p-4 space-y-3 mt-2">
@@ -92,16 +92,17 @@ export function AdminTopbar() {
                   </Link>
                 </SheetClose>
 
+                {/* 👇 BOTÓN DE INVENTARIO ACTIVADO */}
+                <SheetClose asChild>
+                  <Link href="/inventario" className="flex items-center gap-4 p-4 rounded-xl bg-white shadow-sm border border-slate-100 hover:border-blue-300 transition-all text-slate-700 font-bold">
+                    <Package className="size-6 text-orange-500" />
+                    Gestión de Inventario
+                  </Link>
+                </SheetClose>
+
                 <div className="h-px bg-slate-200 my-4 mx-2"></div>
 
-                {/* BOTONES PRÓXIMAMENTE */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-100 border border-slate-200 opacity-60 grayscale">
-                  <div className="flex items-center gap-4 text-slate-500 font-bold text-sm">
-                    <Package className="size-5 text-slate-400" />
-                    Inventario
-                  </div>
-                </div>
-
+                {/* BOTONES PRÓXIMAMENTE (Dejamos solo la tienda para el futuro) */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-slate-100 border border-slate-200 opacity-60 grayscale">
                   <div className="flex items-center gap-4 text-slate-500 font-bold text-sm">
                     <Store className="size-5 text-slate-400" />
@@ -111,7 +112,7 @@ export function AdminTopbar() {
               </div>
             </div>
 
-            {/* BOTÓN DE CERRAR SESIÓN (Fijado abajo) */}
+            {/* BOTÓN DE CERRAR SESIÓN */}
             <div className="p-4 bg-white border-t mt-auto">
               <Button 
                 onClick={handleLogout}

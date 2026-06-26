@@ -12,30 +12,33 @@ import {
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner" 
+import { toast } from "sonner"
 
 interface ClientCardProps {
   id: number
   name: string
   balance: number
+  isOnline: boolean
+  onAbono: (id: number, monto: number, saldoActual: number) => Promise<boolean>
+  onVenta: (id: number, saldo: number, items: Array<{ productoId: number | null; nombre: string; precio: number; cantidad: number }>) => Promise<boolean>
+  onEliminar: (id: number) => Promise<boolean>
 }
 
 interface ItemCarrito {
-  producto: any;
-  cantidad: number;
+  producto: any
+  cantidad: number
 }
 
-export function ClientCard({ id, name, balance }: ClientCardProps) {
+export function ClientCard({ id, name, balance, isOnline, onAbono, onVenta, onEliminar }: ClientCardProps) {
   const [amount, setAmount] = useState("")
   const [isPending, setIsPending] = useState(false)
-  const [isAbonoOpen, setIsAbonoOpen] = useState(false) 
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false) 
-  
+  const [isAbonoOpen, setIsAbonoOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+
   const [isVentaOpen, setIsVentaOpen] = useState(false)
   const [productos, setProductos] = useState<any[]>([])
   const [busquedaProducto, setBusquedaProducto] = useState("")
@@ -49,62 +52,57 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
   const router = useRouter()
 
   useEffect(() => {
-    setCurrentBalance(balance);
-  }, [balance]);
+    setCurrentBalance(balance)
+  }, [balance])
 
+  // Productos: solo carga si hay señal (inventario queda online)
   useEffect(() => {
-    if (isVentaOpen && productos.length === 0) {
+    if (isVentaOpen && productos.length === 0 && isOnline) {
       const fetchProductos = async () => {
         setCargandoProductos(true)
-        const { data } = await supabase.from("productos").select("id, nombre, precio").order("nombre", { ascending: true })
+        const { data } = await supabase
+          .from("productos")
+          .select("id, nombre, precio")
+          .order("nombre", { ascending: true })
         if (data) setProductos(data)
         setCargandoProductos(false)
       }
       fetchProductos()
     }
-  }, [isVentaOpen, productos.length])
+  }, [isVentaOpen, productos.length, isOnline])
+
+  // ── Abono ──────────────────────────────────────────────────────────────
+  const numAmount = parseFloat(amount)
+  const saldoTrasAbono = !isNaN(numAmount) && numAmount > 0 ? currentBalance - numAmount : null
 
   const handlePayment = async () => {
-    const numAmount = parseFloat(amount)
     if (isNaN(numAmount) || numAmount <= 0) {
       toast.error("Por favor, ingresa un monto válido")
       return
     }
     setIsPending(true)
-    try {
-      const newBalance = currentBalance - numAmount
-      const { error: updateError } = await supabase.from("clientes").update({ saldo_pendiente: newBalance }).eq("id", id)
-      if (updateError) throw updateError
-
-      const { error: moveError } = await supabase.from("movimientos").insert([{
-        cliente_id: id,
-        tipo_movimiento: "abono",
-        monto: numAmount,
-        descripcion: "Abono a cuenta",
-      }])
-      if (moveError) throw moveError
-
-      setCurrentBalance(newBalance)
+    const ok = await onAbono(id, numAmount, currentBalance)
+    if (ok) {
+      setCurrentBalance((prev) => prev - numAmount)
       setAmount("")
-      setIsAbonoOpen(false) 
-      toast.success(`Abono registrado: $${numAmount} para ${name}`)
-      router.refresh()
-    } catch (error) {
-      console.error("Error:", error)
+      setIsAbonoOpen(false)
+      toast.success(`Abono registrado: $${numAmount} para ${name}${!isOnline ? " (se subirá al recuperar señal)" : ""}`)
+    } else {
       toast.error("Error al registrar el abono")
-    } finally {
-      setIsPending(false)
     }
+    setIsPending(false)
   }
 
+  // ── Carrito ─────────────────────────────────────────────────────────────
   const agregarAlCarrito = (producto: any) => {
-    setCarrito(prev => {
-      const existe = prev.find(item => item.producto.id === producto.id)
+    setCarrito((prev) => {
+      const existe = prev.find((item) => item.producto.id === producto.id)
       if (existe) {
-        return prev.map(item => item.producto.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item)
-      } else {
-        return [...prev, { producto, cantidad: 1 }]
+        return prev.map((item) =>
+          item.producto.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
+        )
       }
+      return [...prev, { producto, cantidad: 1 }]
     })
   }
 
@@ -118,101 +116,83 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
       toast.error("Ingresa un precio válido")
       return
     }
-
     const productoManual = {
-      id: -Math.floor(Math.random() * 1000000), 
+      id: -Math.floor(Math.random() * 1000000),
       nombre: customName.trim(),
       precio: precioNum,
-      isManual: true 
+      isManual: true,
     }
-
-    setCarrito(prev => [...prev, { producto: productoManual, cantidad: 1 }])
+    setCarrito((prev) => [...prev, { producto: productoManual, cantidad: 1 }])
     setCustomName("")
     setCustomPrice("")
   }
 
   const quitarDelCarrito = (productoId: number) => {
-    setCarrito(prev => {
-      return prev.map(item => {
-        if (item.producto.id === productoId) {
-          return { ...item, cantidad: item.cantidad - 1 }
-        }
-        return item
-      }).filter(item => item.cantidad > 0)
-    })
+    setCarrito((prev) =>
+      prev
+        .map((item) =>
+          item.producto.id === productoId ? { ...item, cantidad: item.cantidad - 1 } : item
+        )
+        .filter((item) => item.cantidad > 0)
+    )
   }
 
-  const totalCarrito = carrito.reduce((total, item) => total + (item.producto.precio * item.cantidad), 0)
+  const totalCarrito = carrito.reduce((total, item) => total + item.producto.precio * item.cantidad, 0)
   const cantidadTotalItems = carrito.reduce((total, item) => total + item.cantidad, 0)
 
+  // ── Venta ───────────────────────────────────────────────────────────────
   const handleConfirmarVenta = async () => {
     if (carrito.length === 0) return
     setIsPending(true)
-    try {
-      const newBalance = currentBalance + totalCarrito
-      const { error: updateError } = await supabase.from("clientes").update({ saldo_pendiente: newBalance }).eq("id", id)
-      if (updateError) throw updateError
-
-      const movimientosAInsertar = carrito.map(item => ({
-        cliente_id: id,
-        tipo_movimiento: "nueva_compra",
-        monto: item.producto.precio * item.cantidad,
-        descripcion: `Venta: ${item.cantidad}x ${item.producto.nombre}`,
-        producto_id: item.producto.isManual ? null : item.producto.id,
-        cantidad: item.cantidad
-      }))
-
-      const { error: moveError } = await supabase.from("movimientos").insert(movimientosAInsertar)
-      if (moveError) throw moveError
-
-      setCurrentBalance(newBalance)
+    const items = carrito.map((item) => ({
+      productoId: item.producto.isManual ? null : item.producto.id,
+      nombre: item.producto.nombre,
+      precio: item.producto.precio,
+      cantidad: item.cantidad,
+    }))
+    const ok = await onVenta(id, currentBalance, items)
+    if (ok) {
+      setCurrentBalance((prev) => prev + totalCarrito)
       setIsVentaOpen(false)
-      setCarrito([]) 
+      setCarrito([])
       setBusquedaProducto("")
-      toast.success(`Venta de $${totalCarrito} registrada con éxito`)
-      router.refresh()
-    } catch (error) {
-      console.error("Error:", error)
+      toast.success(`Venta de $${totalCarrito} registrada${!isOnline ? " (se subirá al recuperar señal)" : ""}`)
+    } else {
       toast.error("Error al registrar la venta")
-    } finally {
-      setIsPending(false)
     }
+    setIsPending(false)
   }
 
+  // ── Eliminar ────────────────────────────────────────────────────────────
   const handleEliminarCliente = async () => {
     setIsPending(true)
-    try {
-      const { error: errorMovs } = await supabase
-        .from("movimientos")
-        .delete()
-        .eq("cliente_id", id)
-      
-      if (errorMovs) throw errorMovs
-
-      const { error: errorCli } = await supabase
-        .from("clientes")
-        .delete()
-        .eq("id", id)
-      
-      if (errorCli) throw errorCli
-
+    const ok = await onEliminar(id)
+    if (ok) {
       toast.success(`Cliente ${name} eliminado`)
-      setIsDeleteOpen(false) 
+      setIsDeleteOpen(false)
       router.refresh()
-    } catch (error) {
-      console.error("Error al eliminar:", error)
+    } else {
       toast.error("Error al eliminar al cliente")
-    } finally {
-      setIsPending(false)
     }
+    setIsPending(false)
   }
 
-  const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(busquedaProducto.toLowerCase()))
+  const productosFiltrados = productos.filter((p) =>
+    p.nombre.toLowerCase().includes(busquedaProducto.toLowerCase())
+  )
   const isOverdue = currentBalance > 500
   const isCredit = currentBalance < 0
 
   return (
-    <Card className={`overflow-hidden border-l-4 transition-colors ${isOverdue ? "border-l-red-500 bg-red-50" : isCredit ? "border-l-green-500 bg-green-50/50" : "border-l-primary"}`}>
+    <Card
+      className={`overflow-hidden border-l-4 transition-colors ${
+        isOverdue
+          ? "border-l-red-500 bg-red-50"
+          : isCredit
+          ? "border-l-green-500 bg-green-50/50"
+          : "border-l-primary"
+      }`}
+    >
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1 min-w-0">
@@ -221,19 +201,28 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
               {isOverdue && <TriangleAlert className="size-5 text-red-600 shrink-0" />}
               {isCredit && <CheckCircle2 className="size-5 text-green-600 shrink-0" />}
             </div>
-            <p className={`text-sm uppercase tracking-wider text-[10px] font-bold ${isCredit ? "text-green-600" : "text-muted-foreground"}`}>
+            <p
+              className={`text-sm uppercase tracking-wider text-[10px] font-bold ${
+                isCredit ? "text-green-600" : "text-muted-foreground"
+              }`}
+            >
               {isCredit ? "Saldo a Favor" : "Saldo Pendiente"}
             </p>
           </div>
-          
+
           <div className="flex flex-col items-end shrink-0 gap-1">
-            <div className={`text-2xl font-black ${isOverdue ? "text-red-600" : isCredit ? "text-green-600" : "text-primary"}`}>
-              {isCredit && "+ "}${Math.abs(currentBalance).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            <div
+              className={`text-2xl font-black ${
+                isOverdue ? "text-red-600" : isCredit ? "text-green-600" : "text-primary"
+              }`}
+            >
+              {isCredit && "+ "}$
+              {Math.abs(currentBalance).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
             </div>
-            
-            <Button 
-              variant="ghost" 
-              size="sm" 
+
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setIsDeleteOpen(true)}
               className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
@@ -250,12 +239,13 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
                       ¿Eliminar a {name}?
                     </DrawerTitle>
                     <DrawerDescription className="text-base mt-2 text-slate-600 font-medium leading-snug">
-                      Esta acción borrará todo su historial de ventas y abonos de forma permanente. 
-                      <br/><br/>
+                      Esta acción borrará todo su historial de ventas y abonos de forma permanente.
+                      <br />
+                      <br />
                       <span className="font-bold text-red-600">Esto no se puede deshacer.</span>
                     </DrawerDescription>
                   </DrawerHeader>
-                  
+
                   <DrawerFooter className="pb-8 pt-4 grid grid-cols-2 gap-3">
                     <DrawerClose asChild>
                       <Button variant="outline" className="h-12 font-bold rounded-xl text-slate-600">
@@ -278,35 +268,76 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
 
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
-            <Drawer open={isAbonoOpen} onOpenChange={setIsAbonoOpen}>
-              <DrawerTrigger asChild>
-                <Button variant="outline" className="w-full bg-green-600 hover:bg-green-700 text-white border-0 h-11 text-sm font-bold shadow-sm">
-                  <Receipt className="mr-2 size-4" /> Abonar
-                </Button>
-              </DrawerTrigger>
+            {/* ── Abono ── */}
+            <Drawer open={isAbonoOpen} onOpenChange={(open) => { setIsAbonoOpen(open); if (!open) setAmount("") }}>
+              <Button
+                variant="outline"
+                className="w-full bg-green-600 hover:bg-green-700 text-white border-0 h-11 text-sm font-bold shadow-sm"
+                onClick={() => setIsAbonoOpen(true)}
+              >
+                <Receipt className="mr-2 size-4" /> Abonar
+              </Button>
               <DrawerContent>
                 <div className="mx-auto w-full max-w-sm relative">
                   <DrawerClose asChild>
-                    <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full"><X className="size-5" /></Button>
+                    <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full">
+                      <X className="size-5" />
+                    </Button>
                   </DrawerClose>
                   <DrawerHeader>
-                    <DrawerTitle className="text-xl">Registrar Abono</DrawerTitle>
+                    <DrawerTitle className="text-xl">Registrar Abono — {name}</DrawerTitle>
+                    {/* Saldo actual siempre visible */}
+                    <div className="mt-3 flex items-center justify-between bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+                      <p className="text-sm text-slate-500 font-medium">Saldo actual</p>
+                      <p className="text-lg font-black text-red-600">
+                        ${currentBalance.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
                   </DrawerHeader>
-                  <div className="p-6">
+                  <div className="px-6 pt-2 pb-0">
                     <div className="relative flex items-center justify-center">
                       <span className="absolute left-8 text-4xl font-bold text-muted-foreground">$</span>
-                      <Input type="number" placeholder="0.00" className="text-4xl h-20 text-center font-black rounded-2xl bg-muted/50 border-none" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        className="text-4xl h-20 text-center font-black rounded-2xl bg-muted/50 border-none"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
                     </div>
+
+                    {/* Saldo que quedará — aparece en tiempo real */}
+                    {saldoTrasAbono !== null && (
+                      <div className={`mt-3 flex items-center justify-between rounded-xl px-4 py-2.5 border ${
+                        saldoTrasAbono <= 0
+                          ? "bg-green-50 border-green-100"
+                          : "bg-slate-50 border-slate-200"
+                      }`}>
+                        <p className="text-sm text-slate-500 font-medium">Quedará</p>
+                        <p className={`text-lg font-black ${saldoTrasAbono <= 0 ? "text-green-600" : "text-slate-700"}`}>
+                          {saldoTrasAbono < 0 && "+ "}
+                          ${Math.abs(saldoTrasAbono).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          {saldoTrasAbono < 0 && " a favor"}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <DrawerFooter className="pb-8">
-                    <Button onClick={handlePayment} disabled={isPending} className="h-14 text-lg bg-green-600 hover:bg-green-700 font-bold rounded-xl">Confirmar Pago</Button>
+                  <DrawerFooter className="pb-8 pt-4">
+                    <Button
+                      onClick={handlePayment}
+                      disabled={isPending}
+                      className="h-14 text-lg bg-green-600 hover:bg-green-700 font-bold rounded-xl"
+                    >
+                      {isPending ? "Guardando..." : "Confirmar Pago"}
+                    </Button>
                   </DrawerFooter>
                 </div>
               </DrawerContent>
             </Drawer>
 
-            <Drawer 
-              open={isVentaOpen} 
+            {/* ── Venta ── */}
+            <Drawer
+              open={isVentaOpen}
               onOpenChange={(open) => {
                 setIsVentaOpen(open)
                 if (!open) {
@@ -315,73 +346,171 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
                   setCustomPrice("")
                 }
               }}
-              repositionInputs={false} 
+              repositionInputs={false}
             >
-              <DrawerTrigger asChild>
-                <Button variant="outline" className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 h-11 text-sm font-bold shadow-sm">
-                  <ShoppingCart className="mr-2 size-4" /> Vender
-                </Button>
-              </DrawerTrigger>
-              
+              <Button
+                variant="outline"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 h-11 text-sm font-bold shadow-sm"
+                onClick={() => setIsVentaOpen(true)}
+              >
+                <ShoppingCart className="mr-2 size-4" /> Vender
+              </Button>
+
               <DrawerContent className="h-[85vh] flex flex-col overflow-hidden">
                 <div className="mx-auto w-full max-w-md relative flex flex-col h-full overflow-hidden">
                   <DrawerClose asChild>
-                    <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full z-10"><X className="size-5 text-muted-foreground" /></Button>
+                    <Button variant="ghost" size="icon" className="absolute right-2 top-2 rounded-full z-10">
+                      <X className="size-5 text-muted-foreground" />
+                    </Button>
                   </DrawerClose>
 
                   <DrawerHeader className="pb-2 shrink-0">
                     <DrawerTitle className="text-xl text-left">Nueva Venta a {name}</DrawerTitle>
                   </DrawerHeader>
 
+                  {/* Producto manual */}
                   <div className="px-4 pb-3 border-b shrink-0 bg-blue-50/50 flex gap-2 items-center">
                     <div className="flex-1 flex gap-2">
-                      <Input placeholder="Ej. Ropa, Blusa..." className="h-10 bg-white border-slate-200" value={customName} onChange={(e) => setCustomName(e.target.value)} />
+                      <Input
+                        placeholder="Ej. Ropa, Blusa..."
+                        className="h-10 bg-white border-slate-200"
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                      />
                       <div className="relative w-24 shrink-0">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">$</span>
-                        <Input type="number" placeholder="0.00" className="h-10 pl-5 bg-white border-slate-200" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} />
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          className="h-10 pl-5 bg-white border-slate-200"
+                          value={customPrice}
+                          onChange={(e) => setCustomPrice(e.target.value)}
+                        />
                       </div>
                     </div>
-                    <Button size="icon" className="h-10 w-10 shrink-0 bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={agregarManualAlCarrito}>
+                    <Button
+                      size="icon"
+                      className="h-10 w-10 shrink-0 bg-blue-600 hover:bg-blue-700 shadow-sm"
+                      onClick={agregarManualAlCarrito}
+                    >
                       <Plus className="size-5 text-white" />
                     </Button>
                   </div>
 
-                  <div className="px-4 py-2 border-b shrink-0 bg-white">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-                      <Input placeholder="O busca en el inventario..." className="pl-10 h-10 rounded-xl bg-slate-50" value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} />
+                  {/* Buscador inventario (solo online) */}
+                  {isOnline && (
+                    <div className="px-4 py-2 border-b shrink-0 bg-white">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
+                        <Input
+                          placeholder="O busca en el inventario..."
+                          className="pl-10 h-10 rounded-xl bg-slate-50"
+                          value={busquedaProducto}
+                          onChange={(e) => setBusquedaProducto(e.target.value)}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {!isOnline && (
+                    <div className="mx-4 mt-2 shrink-0 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium px-3 py-2 rounded-xl">
+                      ⚡ Sin señal — usa el campo de arriba para agregar productos manualmente
+                    </div>
+                  )}
 
                   <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-2">
-                    {cargandoProductos ? (
-                      <p className="text-center text-muted-foreground mt-10">Cargando catálogo...</p>
-                    ) : (
-                      productosFiltrados.map((prod) => {
-                        const enCarrito = carrito.find(item => item.producto.id === prod.id)?.cantidad || 0
-                        return (
-                          <div key={prod.id} className="grid grid-cols-[1fr_auto] items-center p-3 rounded-xl border bg-white shadow-sm gap-3 w-full">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="bg-slate-100 p-2 rounded-lg text-slate-600 shrink-0"><Package className="size-5" /></div>
-                              <div className="flex flex-col overflow-hidden w-full">
-                                <p className="font-bold text-sm text-slate-800 leading-tight truncate w-full">{prod.nombre}</p>
-                                <p className="text-xs text-muted-foreground font-medium mt-0.5">${prod.precio}</p>
+                    {isOnline && (
+                      cargandoProductos ? (
+                        <p className="text-center text-muted-foreground mt-10">Cargando catálogo...</p>
+                      ) : (
+                        productosFiltrados.map((prod) => {
+                          const enCarrito = carrito.find((item) => item.producto.id === prod.id)?.cantidad || 0
+                          return (
+                            <div
+                              key={prod.id}
+                              className="grid grid-cols-[1fr_auto] items-center p-3 rounded-xl border bg-white shadow-sm gap-3 w-full"
+                            >
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="bg-slate-100 p-2 rounded-lg text-slate-600 shrink-0">
+                                  <Package className="size-5" />
+                                </div>
+                                <div className="flex flex-col overflow-hidden w-full">
+                                  <p className="font-bold text-sm text-slate-800 leading-tight truncate w-full">
+                                    {prod.nombre}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground font-medium mt-0.5">${prod.precio}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end">
+                                {enCarrito > 0 ? (
+                                  <div className="flex items-center gap-1 bg-blue-50 rounded-lg p-1 border border-blue-100">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 rounded-md text-blue-700 hover:bg-blue-200"
+                                      onClick={() => quitarDelCarrito(prod.id)}
+                                    >
+                                      <Minus className="size-4" />
+                                    </Button>
+                                    <span className="font-bold w-5 text-center text-blue-700 text-sm">{enCarrito}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 rounded-md text-blue-700 hover:bg-blue-200"
+                                      onClick={() => agregarAlCarrito(prod)}
+                                    >
+                                      <Plus className="size-4" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    className="bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold px-4 h-8"
+                                    onClick={() => agregarAlCarrito(prod)}
+                                  >
+                                    Agregar
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center justify-end">
-                              {enCarrito > 0 ? (
-                                <div className="flex items-center gap-1 bg-blue-50 rounded-lg p-1 border border-blue-100">
-                                  <Button variant="ghost" size="icon" className="size-8 rounded-md text-blue-700 hover:bg-blue-200" onClick={() => quitarDelCarrito(prod.id)}><Minus className="size-4" /></Button>
-                                  <span className="font-bold w-5 text-center text-blue-700 text-sm">{enCarrito}</span>
-                                  <Button variant="ghost" size="icon" className="size-8 rounded-md text-blue-700 hover:bg-blue-200" onClick={() => agregarAlCarrito(prod)}><Plus className="size-4" /></Button>
-                                </div>
-                              ) : (
-                                <Button size="sm" className="bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold px-4 h-8" onClick={() => agregarAlCarrito(prod)}>Agregar</Button>
-                              )}
+                          )
+                        })
+                      )
+                    )}
+
+                    {!isOnline && carrito.length > 0 && (
+                      <div className="space-y-2">
+                        {carrito.map((item) => (
+                          <div
+                            key={item.producto.id}
+                            className="flex items-center justify-between p-3 rounded-xl border bg-white shadow-sm"
+                          >
+                            <div>
+                              <p className="font-bold text-sm text-slate-800">{item.producto.nombre}</p>
+                              <p className="text-xs text-muted-foreground">${item.producto.precio} × {item.cantidad}</p>
+                            </div>
+                            <div className="flex items-center gap-1 bg-blue-50 rounded-lg p-1 border border-blue-100">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-md text-blue-700 hover:bg-blue-200"
+                                onClick={() => quitarDelCarrito(item.producto.id)}
+                              >
+                                <Minus className="size-4" />
+                              </Button>
+                              <span className="font-bold w-5 text-center text-blue-700 text-sm">{item.cantidad}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-md text-blue-700 hover:bg-blue-200"
+                                onClick={() => agregarAlCarrito(item.producto)}
+                              >
+                                <Plus className="size-4" />
+                              </Button>
                             </div>
                           </div>
-                        )
-                      })
+                        ))}
+                      </div>
                     )}
                   </div>
 
@@ -391,7 +520,11 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
                         <p className="text-sm font-semibold text-slate-600">{cantidadTotalItems} artículos seleccionados</p>
                         <p className="font-black text-lg text-blue-700">Total: ${totalCarrito}</p>
                       </div>
-                      <Button onClick={handleConfirmarVenta} disabled={isPending} className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 font-bold rounded-xl shadow-md">
+                      <Button
+                        onClick={handleConfirmarVenta}
+                        disabled={isPending}
+                        className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 font-bold rounded-xl shadow-md"
+                      >
                         {isPending ? "Procesando..." : "Confirmar Venta"}
                       </Button>
                     </div>
@@ -401,8 +534,8 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
             </Drawer>
           </div>
 
-          <Button 
-            variant="secondary" 
+          <Button
+            variant="secondary"
             onClick={() => router.push(`/historial?cliente=${encodeURIComponent(name)}`)}
             className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold h-11 rounded-xl"
           >
@@ -410,7 +543,6 @@ export function ClientCard({ id, name, balance }: ClientCardProps) {
             Ver historial de la cuenta
           </Button>
         </div>
-
       </CardContent>
     </Card>
   )

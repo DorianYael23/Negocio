@@ -1,8 +1,8 @@
-import withPWAInit from "next-pwa";
+import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
-  disable: process.env.NODE_ENV === "development", // Evita problemas de caché mientras programas en local
+  disable: process.env.NODE_ENV === "development", // Apagado en local para no interferir
 });
 
 /** @type {import('next').NextConfig} */

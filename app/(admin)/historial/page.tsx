@@ -20,8 +20,6 @@ import {
   DrawerClose,
   DrawerContent,
   DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
 
@@ -138,15 +136,19 @@ function HistorialContent() {
   }, [clienteQuery]);
 
   const fetchMovimientos = async () => {
+    // ⚠️ AQUÍ ESTÁ LA CORRECCIÓN CLAVE: productos!fk_movimiento_producto
     const { data, error } = await supabase
       .from("movimientos")
       .select(`
         id, cliente_id, monto, tipo_movimiento, created_at, descripcion,
-        clientes ( nombre ), productos ( nombre )
+        clientes ( nombre ), 
+        productos!fk_movimiento_producto ( nombre )
       `)
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
+    if (error) {
+      toast.error(`Error al cargar datos: ${error.message}`);
+    } else if (data) {
       const movimientosFormateados = data.map((mov: any) => ({
         ...mov,
         clientes: Array.isArray(mov.clientes) ? mov.clientes[0] || null : mov.clientes,
@@ -190,9 +192,12 @@ function HistorialContent() {
   };
 
   const clientesAgrupados = useMemo(() => {
+    if (!movimientos || movimientos.length === 0) return [];
+
     const filtrados = movimientos.filter((mov) =>
       (mov.clientes?.nombre || "Desconocido").toLowerCase().includes(busqueda.toLowerCase())
     );
+
     const grupos = filtrados.reduce((acc, mov) => {
       const nombre = mov.clientes?.nombre || "Cliente desconocido";
       if (!acc[nombre]) acc[nombre] = { totalAbonos: 0, totalCompras: 0, lista: [] };
@@ -201,6 +206,7 @@ function HistorialContent() {
       else acc[nombre].totalCompras += mov.monto;
       return acc;
     }, {} as any);
+
     return Object.entries(grupos).sort((a: any, b: any) => a[0].localeCompare(b[0]));
   }, [movimientos, busqueda]);
 
@@ -231,7 +237,12 @@ function HistorialContent() {
 
       <div className="space-y-4">
         {cargando ? (
-          <div className="text-center py-10 text-muted-foreground animate-pulse">Cargando...</div>
+          <div className="text-center py-10 text-muted-foreground animate-pulse">Cargando datos...</div>
+        ) : clientesAgrupados.length === 0 ? (
+          <div className="text-center py-10 text-slate-500 font-bold bg-white rounded-lg border border-slate-200 shadow-sm">
+            No se encontraron resultados.
+            {busqueda && <p className="text-xs font-normal mt-1 text-slate-400">Intenta borrar la búsqueda.</p>}
+          </div>
         ) : (
           <Accordion type="multiple" className="space-y-3" defaultValue={clienteQuery ? ["item-0"] : []}>
             {clientesAgrupados.map(([nombreCliente, datos]: any, index: number) => (

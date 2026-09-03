@@ -14,3 +14,7 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+# PWA files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js

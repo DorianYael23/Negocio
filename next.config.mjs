@@ -2,7 +2,10 @@ import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
-  disable: process.env.NODE_ENV === "development", // Apagado en local para no interferir
+  disable: false,
+  workboxOptions: {
+    disableDevLogs: true,
+  },
 });
 
 /** @type {import('next').NextConfig} */
@@ -12,6 +15,19 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+  },
+  turbopack: {},
+  async headers() {
+    return [
+      {
+        source: "/manifest.json",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET,OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "X-Requested-With, content-type, Authorization" },
+        ],
+      },
+    ];
   },
 };
 
